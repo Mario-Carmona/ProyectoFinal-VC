@@ -1793,7 +1793,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         printf("Palabra: %s \n", token);
 
         
-        
+        token = strcat("predictions/", token);
         
         save_image(im, token);
         if (!dont_show) {
