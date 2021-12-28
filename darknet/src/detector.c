@@ -1745,9 +1745,59 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         }
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
-        save_image(im, obtenerFichero(input));
+        
+        
+        // Obtener nombre del fichero
+
+        char delim = '/';
+
+        int contador = 0;
+        int i = 0;
+        int j = 0;
+    
+        int largo = strlen(input);
+        char *palabra = (char *)malloc(sizeof(char) * largo);
+        for (i = 0; i < largo; i++)
+        {
+            palabra[i] = '\0';
+        }
+    
+        for (i = 0; i <= largo; i++)
+        {
+    
+            if (input[i] == delim && input[i + 1] != delim)
+            {
+                contador++;
+                printf("Palabra: %s \n", palabra);
+                memset(palabra, '\0', sizeof(palabra));
+                j = 0;
+            }
+            else
+            {
+                if (input[i] == '\0')
+                {
+                    printf("Palabra: %s \n", palabra);
+                    contador++;
+                }
+                else
+                {
+                    palabra[j] = input[i];
+                    j++;
+                }
+            }
+        }
+        printf("la cantidad de palabras es %d \n", contador);
+
+        char* token = strtok(palabra, ".");
+
+        printf("Palabra: %s \n", token);
+
+        free(palabra);
+        
+        
+        save_image(im, token);
         if (!dont_show) {
-            show_image(im, obtenerFichero(input));
+            show_image(im, token);
         }
 
         if (json_file) {
