@@ -1626,7 +1626,6 @@ void guardarImagen(char* input, image im, int dont_show)
         if (input[i] == delim && input[i + 1] != delim)
         {
             contador++;
-            printf("Palabra: %s \n", palabra);
             memset(palabra, '\0', sizeof(palabra));
             j = 0;
         }
@@ -1634,7 +1633,6 @@ void guardarImagen(char* input, image im, int dont_show)
         {
             if (input[i] == '\0')
             {
-                printf("Palabra: %s \n", palabra);
                 contador++;
             }
             else
@@ -1644,7 +1642,6 @@ void guardarImagen(char* input, image im, int dont_show)
             }
         }
     }
-    printf("la cantidad de palabras es %d \n", contador);
 
     char* token = strtok(palabra, ".");
     
