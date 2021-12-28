@@ -1607,14 +1607,48 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 
 char* obtenerFichero(char* ruta)
 {
-    char* fichero = "";
-    char* ficheroTmp = "";
-    do {
-        fichero = ficheroTmp;
-        ficheroTmp = strtok(ruta, "/");
-    }while(ficheroTmp != NULL);
+    char delim = '/';
 
-    char* token = strtok(fichero, ".");
+    int contador = 0;
+    int i = 0;
+    int j = 0;
+ 
+    int largo = strlen(ruta);
+    char *palabra = (char *)malloc(sizeof(char) * largo);
+    for (i = 0; i < largo; i++)
+    {
+        palabra[i] = '\0';
+    }
+ 
+    for (i = 0; i <= largo; i++)
+    {
+ 
+        if (ruta[i] == delim && ruta[i + 1] != delim)
+        {
+            contador++;
+            printf("Palabra: %s \n", palabra);
+            memset(palabra, '\0', sizeof(palabra));
+            j = 0;
+        }
+        else
+        {
+            if (ruta[i] == '\0')
+            {
+                printf("Palabra: %s \n", palabra);
+                contador++;
+            }
+            else
+            {
+                palabra[j] = ruta[i];
+                j++;
+            }
+        }
+    }
+    printf("la cantidad de palabras es %d \n", contador);
+
+    char* token = strtok(palabra, ".");
+
+    free(palabra);
 
     return token;
 }
