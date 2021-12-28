@@ -1648,6 +1648,8 @@ char* obtenerFichero(char* ruta)
 
     char* token = strtok(palabra, ".");
 
+    printf("Palabra: %s \n", token);
+
     free(palabra);
 
     return token;
@@ -1745,6 +1747,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         char* fichero = obtenerFichero(input);
         char* imagenSalida = strcat("predictions/", fichero);
+        printf("Palabra: %s \n", imagenSalida);
         save_image(im, imagenSalida);
         if (!dont_show) {
             show_image(im, imagenSalida);
