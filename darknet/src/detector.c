@@ -1605,6 +1605,21 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 }
 
 
+char* obtenerFichero(char* ruta)
+{
+    char* fichero = "";
+    char* ficheroTmp = "";
+    do {
+        fichero = ficheroTmp;
+        ficheroTmp = strtok(ruta, "/");
+    }while(ficheroTmp != NULL);
+
+    char* token = strtok(fichero, ".");
+
+    return token;
+}
+
+
 void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filename, float thresh,
     float hier_thresh, int dont_show, int ext_output, int save_labels, char *outfile, int letter_box, int benchmark_layers)
 {
@@ -1694,7 +1709,8 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         }
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
-        char* imagenSalida = strcat("predictions/", input);
+        char* fichero = obtenerFichero(input);
+        char* imagenSalida = strcat("predictions/", fichero);
         save_image(im, imagenSalida);
         if (!dont_show) {
             show_image(im, imagenSalida);
