@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include <string.h>
 #include "darknet.h"
 #include "network.h"
 #include "region_layer.h"
@@ -1654,6 +1655,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             input = fgets(input, 256, stdin);
             if (!input) break;
             strtok(input, "\n");
+            printf(input, "\n");
         }
         //image im;
         //image sized = load_image_resize(input, net.w, net.h, net.c, &im);
@@ -1692,9 +1694,10 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         }
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
-        save_image(im, "predictions");
+        char* imagenSalida = strcat("predictions/", input);
+        save_image(im, imagenSalida);
         if (!dont_show) {
-            show_image(im, "predictions");
+            show_image(im, imagenSalida);
         }
 
         if (json_file) {
