@@ -1605,25 +1605,25 @@ void calc_anchors(char *datacfg, int num_of_clusters, int width, int height, int
 }
 
 
-char* obtenerFichero(char* ruta)
+void guardarImagen(char* input, image im, int dont_show)
 {
     char delim = '/';
 
     int contador = 0;
     int i = 0;
     int j = 0;
- 
-    int largo = strlen(ruta);
+
+    int largo = strlen(input);
     char *palabra = (char *)malloc(sizeof(char) * largo);
     for (i = 0; i < largo; i++)
     {
         palabra[i] = '\0';
     }
- 
+
     for (i = 0; i <= largo; i++)
     {
- 
-        if (ruta[i] == delim && ruta[i + 1] != delim)
+
+        if (input[i] == delim && input[i + 1] != delim)
         {
             contador++;
             printf("Palabra: %s \n", palabra);
@@ -1632,14 +1632,14 @@ char* obtenerFichero(char* ruta)
         }
         else
         {
-            if (ruta[i] == '\0')
+            if (input[i] == '\0')
             {
                 printf("Palabra: %s \n", palabra);
                 contador++;
             }
             else
             {
-                palabra[j] = ruta[i];
+                palabra[j] = input[i];
                 j++;
             }
         }
@@ -1647,12 +1647,13 @@ char* obtenerFichero(char* ruta)
     printf("la cantidad de palabras es %d \n", contador);
 
     char* token = strtok(palabra, ".");
-
-    printf("Palabra: %s \n", token);
+    
+    save_image(im, token);
+    if (!dont_show) {
+        show_image(im, token);
+    }
 
     free(palabra);
-
-    return token;
 }
 
 
@@ -1747,60 +1748,7 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
         
         
-        // Obtener nombre del fichero
-
-        char delim = '/';
-
-        int contador = 0;
-        int i = 0;
-        int j = 0;
-    
-        int largo = strlen(input);
-        char *palabra = (char *)malloc(sizeof(char) * largo);
-        for (i = 0; i < largo; i++)
-        {
-            palabra[i] = '\0';
-        }
-    
-        for (i = 0; i <= largo; i++)
-        {
-    
-            if (input[i] == delim && input[i + 1] != delim)
-            {
-                contador++;
-                printf("Palabra: %s \n", palabra);
-                memset(palabra, '\0', sizeof(palabra));
-                j = 0;
-            }
-            else
-            {
-                if (input[i] == '\0')
-                {
-                    printf("Palabra: %s \n", palabra);
-                    contador++;
-                }
-                else
-                {
-                    palabra[j] = input[i];
-                    j++;
-                }
-            }
-        }
-        printf("la cantidad de palabras es %d \n", contador);
-
-        char* token = strtok(palabra, ".");
-
-        printf("Palabra: %s \n", token);
-
-        
-        token = strcat("predictions/", token);
-        
-        save_image(im, token);
-        if (!dont_show) {
-            show_image(im, token);
-        }
-
-        free(palabra);
+        guardarImagen(input, im, dont_show);
 
         if (json_file) {
             if (json_buf) {
