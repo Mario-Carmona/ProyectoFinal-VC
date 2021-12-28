@@ -160,7 +160,7 @@ endif
 OBJS = $(addprefix $(OBJDIR), $(OBJ))
 DEPS = $(wildcard src/*.h) Makefile include/darknet.h
 
-all: $(OBJDIR) backup results setchmod $(EXEC) $(LIBNAMESO) $(APPNAMESO)
+all: $(OBJDIR) backup results setchmod predictions $(EXEC) $(LIBNAMESO) $(APPNAMESO)
 
 ifeq ($(LIBSO), 1)
 CFLAGS+= -fPIC
@@ -190,6 +190,8 @@ backup:
 	mkdir -p backup
 results:
 	mkdir -p results
+predictions:
+	mkdir -p predictions
 setchmod:
 	chmod +x *.sh
 
