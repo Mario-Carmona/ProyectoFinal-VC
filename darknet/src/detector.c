@@ -1792,13 +1792,15 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
 
         printf("Palabra: %s \n", token);
 
-        free(palabra);
+        
         
         
         save_image(im, token);
         if (!dont_show) {
             show_image(im, token);
         }
+
+        free(palabra);
 
         if (json_file) {
             if (json_buf) {
