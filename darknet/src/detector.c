@@ -1745,12 +1745,9 @@ void test_detector(char *datacfg, char *cfgfile, char *weightfile, char *filenam
             else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
         }
         draw_detections_v3(im, dets, nboxes, thresh, names, alphabet, l.classes, ext_output);
-        char* fichero = obtenerFichero(input);
-        char* imagenSalida = strcat("predictions/", fichero);
-        printf("Palabra: %s \n", imagenSalida);
-        save_image(im, imagenSalida);
+        save_image(im, obtenerFichero(input));
         if (!dont_show) {
-            show_image(im, imagenSalida);
+            show_image(im, obtenerFichero(input));
         }
 
         if (json_file) {
