@@ -453,8 +453,7 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
 void validate_detector_loss(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show, int calc_map, float thresh, float iou_thresh, int mjpeg_port, int show_imgs, int benchmark_layers, char* chart_path)
 {
     list *options = read_data_cfg(datacfg);
-    char *train_images = option_find_str(options, "train", "data/train.txt");
-    char *valid_images = option_find_str(options, "valid", train_images);
+    char *valid_images = option_find_str(options, "valid", "data/train.txt");
 
     srand(time(0));
     char *base = basecfg(cfgfile);
@@ -514,132 +513,120 @@ void validate_detector_loss(char *datacfg, char *cfgfile, char *weightfile, int 
     FILE *fp;
     fp = fopen ( "loss.txt", "w+" );
 
-    for(int i = 0; i < 2; ++i)
-    {
-        if(i == 0){
-            plist = get_paths(train_images);
-            train_images_num = plist->size;
-            paths = (char **)list_to_array(plist);
-        }
-        else if(i == 1){
-            plist = get_paths(valid_images);
-            train_images_num = plist->size;
-            paths = (char **)list_to_array(plist);
-        }
 
-        const int init_w = net.w;
-        const int init_h = net.h;
-        const int init_b = net.batch;
-        int iter_save, iter_save_last, iter_map;
-        iter_save = get_current_iteration(net);
-        iter_save_last = get_current_iteration(net);
-        iter_map = get_current_iteration(net);
-        float mean_average_precision = -1;
-        float best_map = mean_average_precision;
+    plist = get_paths(valid_images);
+    train_images_num = plist->size;
+    paths = (char **)list_to_array(plist);
 
-        load_args args = { 0 };
-        args.w = net.w;
-        args.h = net.h;
-        args.c = net.c;
-        args.paths = paths;
-        args.n = imgs;
-        args.m = plist->size;
-        args.classes = classes;
-        args.flip = net.flip;
-        args.jitter = l.jitter;
-        args.resize = l.resize;
-        args.num_boxes = l.max_boxes;
-        args.truth_size = l.truth_size;
-        net.num_boxes = args.num_boxes;
-        net.train_images_num = train_images_num;
-        args.d = &buffer;
-        args.type = DETECTION_DATA;
-        args.threads = 64;    // 16 or 64
+    const int init_w = net.w;
+    const int init_h = net.h;
+    const int init_b = net.batch;
+    int iter_save, iter_save_last, iter_map;
+    iter_save = get_current_iteration(net);
+    iter_save_last = get_current_iteration(net);
+    iter_map = get_current_iteration(net);
+    float mean_average_precision = -1;
+    float best_map = mean_average_precision;
 
-        args.angle = net.angle;
-        args.gaussian_noise = net.gaussian_noise;
-        args.blur = net.blur;
-        args.mixup = net.mixup;
-        args.exposure = net.exposure;
-        args.saturation = net.saturation;
-        args.hue = net.hue;
-        args.letter_box = net.letter_box;
-        args.mosaic_bound = net.mosaic_bound;
-        args.contrastive = net.contrastive;
-        args.contrastive_jit_flip = net.contrastive_jit_flip;
-        args.contrastive_color = net.contrastive_color;
-        if (dont_show && show_imgs) show_imgs = 2;
-        args.show_imgs = show_imgs;
+    load_args args = { 0 };
+    args.w = net.w;
+    args.h = net.h;
+    args.c = net.c;
+    args.paths = paths;
+    args.n = imgs;
+    args.m = plist->size;
+    args.classes = classes;
+    args.flip = net.flip;
+    args.jitter = l.jitter;
+    args.resize = l.resize;
+    args.num_boxes = l.max_boxes;
+    args.truth_size = l.truth_size;
+    net.num_boxes = args.num_boxes;
+    net.train_images_num = train_images_num;
+    args.d = &buffer;
+    args.type = DETECTION_DATA;
+    args.threads = 64;    // 16 or 64
+
+    args.angle = net.angle;
+    args.gaussian_noise = net.gaussian_noise;
+    args.blur = net.blur;
+    args.mixup = net.mixup;
+    args.exposure = net.exposure;
+    args.saturation = net.saturation;
+    args.hue = net.hue;
+    args.letter_box = net.letter_box;
+    args.mosaic_bound = net.mosaic_bound;
+    args.contrastive = net.contrastive;
+    args.contrastive_jit_flip = net.contrastive_jit_flip;
+    args.contrastive_color = net.contrastive_color;
+    if (dont_show && show_imgs) show_imgs = 2;
+    args.show_imgs = show_imgs;
 
 #ifdef OPENCV
-        //int num_threads = get_num_threads();
-        //if(num_threads > 2) args.threads = get_num_threads() - 2;
-        args.threads = 6 * ngpus;   // 3 for - Amazon EC2 Tesla V100: p3.2xlarge (8 logical cores) - p3.16xlarge
-        //args.threads = 12 * ngpus;    // Ryzen 7 2700X (16 logical cores)
-        mat_cv* img = NULL;
-        float max_img_loss = net.max_chart_loss;
-        int number_of_lines = 100;
-        int img_size = 1000;
-        char windows_name[100];
-        sprintf(windows_name, "chart_%s.png", base);
-        img = draw_train_chart(windows_name, max_img_loss, net.max_batches, number_of_lines, img_size, dont_show, chart_path);
+    //int num_threads = get_num_threads();
+    //if(num_threads > 2) args.threads = get_num_threads() - 2;
+    args.threads = 6 * ngpus;   // 3 for - Amazon EC2 Tesla V100: p3.2xlarge (8 logical cores) - p3.16xlarge
+    //args.threads = 12 * ngpus;    // Ryzen 7 2700X (16 logical cores)
+    mat_cv* img = NULL;
+    float max_img_loss = net.max_chart_loss;
+    int number_of_lines = 100;
+    int img_size = 1000;
+    char windows_name[100];
+    sprintf(windows_name, "chart_%s.png", base);
+    img = draw_train_chart(windows_name, max_img_loss, net.max_batches, number_of_lines, img_size, dont_show, chart_path);
 #endif    //OPENCV
-        if (net.contrastive && args.threads > net.batch/2) args.threads = net.batch / 2;
-        if (net.track) {
-            args.track = net.track;
-            args.augment_speed = net.augment_speed;
-            if (net.sequential_subdivisions) args.threads = net.sequential_subdivisions * ngpus;
-            else args.threads = net.subdivisions * ngpus;
-            args.mini_batch = net.batch / net.time_steps;
-            printf("\n Tracking! batch = %d, subdiv = %d, time_steps = %d, mini_batch = %d \n", net.batch, net.subdivisions, net.time_steps, args.mini_batch);
-        }
-        //printf(" imgs = %d \n", imgs);
+    if (net.contrastive && args.threads > net.batch/2) args.threads = net.batch / 2;
+    if (net.track) {
+        args.track = net.track;
+        args.augment_speed = net.augment_speed;
+        if (net.sequential_subdivisions) args.threads = net.sequential_subdivisions * ngpus;
+        else args.threads = net.subdivisions * ngpus;
+        args.mini_batch = net.batch / net.time_steps;
+        printf("\n Tracking! batch = %d, subdiv = %d, time_steps = %d, mini_batch = %d \n", net.batch, net.subdivisions, net.time_steps, args.mini_batch);
+    }
+    //printf(" imgs = %d \n", imgs);
 
-        pthread_t load_thread = load_data(args);
+    pthread_t load_thread = load_data(args);
 
-        int count = 0;
-        double time_remaining, avg_time = -1, alpha_time = 0.01;
+    int count = 0;
+    double time_remaining, avg_time = -1, alpha_time = 0.01;
 
-        double time = what_time_is_it_now();
-        pthread_join(load_thread, 0);
-        train = buffer;
-        if (net.track) {
-            net.sequential_subdivisions = get_current_seq_subdivisions(net);
-            args.threads = net.sequential_subdivisions * ngpus;
-            printf(" sequential_subdivisions = %d, sequence = %d \n", net.sequential_subdivisions, get_sequence_value(net));
-        }
-        load_thread = load_data(args);
+    double time = what_time_is_it_now();
+    pthread_join(load_thread, 0);
+    train = buffer;
+    if (net.track) {
+        net.sequential_subdivisions = get_current_seq_subdivisions(net);
+        args.threads = net.sequential_subdivisions * ngpus;
+        printf(" sequential_subdivisions = %d, sequence = %d \n", net.sequential_subdivisions, get_sequence_value(net));
+    }
+    load_thread = load_data(args);
 
-        const double load_time = (what_time_is_it_now() - time);
-        printf("Loaded: %lf seconds", load_time);
-        printf("\n");
+    const double load_time = (what_time_is_it_now() - time);
+    printf("Loaded: %lf seconds", load_time);
+    printf("\n");
 
-        time = what_time_is_it_now();
-        float loss = 0;
+    time = what_time_is_it_now();
+    float loss = 0;
 #ifdef GPU
-        if (ngpus == 1) {
-            int wait_key = (dont_show) ? 0 : 1;
-            loss = train_network_waitkey(net, train, wait_key);
-        }
-        else {
-            loss = train_networks(nets, ngpus, train, 4);
-        }
+    if (ngpus == 1) {
+        int wait_key = (dont_show) ? 0 : 1;
+        loss = train_network_waitkey(net, train, wait_key);
+    }
+    else {
+        loss = train_networks(nets, ngpus, train, 4);
+    }
 #else
-        loss = train_network(net, train);
+    loss = train_network(net, train);
 #endif
 
-        if(i == 0){
-            fprintf(fp, "Loss_Train: %f\n", loss);
-        }
-        else if(i == 1){
-            fprintf(fp, "Loss_Valid: %f", loss);
-        }
 
-        free_load_threads(&args);
-        free(paths);
-        free_list_contents(plist);
-        free_list(plist);
-    }
+    fprintf(fp, "Loss: %f", loss);
+
+    free_load_threads(&args);
+    free(paths);
+    free_list_contents(plist);
+    free_list(plist);
+
 
     fclose ( fp );
 
