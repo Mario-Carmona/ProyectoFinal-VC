@@ -924,8 +924,8 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
 
     FILE *fp;
     fp = fopen ( "recall.txt", "w+" );
-    fprintf(fp, "Recall: %.2f%%\n", mean_recall);
-    fprintf(fp, "IOU: %.2f%%", mean_iou);
+    fprintf(fp, "Recall: %.2f\n", mean_recall);
+    fprintf(fp, "IOU: %.2f", mean_iou);
     fclose ( fp );
 }
 
