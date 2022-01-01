@@ -942,6 +942,8 @@ void train_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
     int proposals = 0;
     float avg_iou = 0;
 
+    print("Número paths: %i\n", m);
+
     for (i = 0; i < m; ++i) {
         char *path = paths[i];
         image orig = load_image(path, 0, 0, net.c);
