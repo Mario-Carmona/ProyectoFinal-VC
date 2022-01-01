@@ -1041,7 +1041,8 @@ void validate_detector(char *datacfg, char *cfgfile, char *weightfile, char *out
 
 void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
 {
-    network net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
+    //network net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
+    network net = parse_network_cfg(cfgfile);
     if (weightfile) {
         load_weights(&net, weightfile);
     }
