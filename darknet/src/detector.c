@@ -866,6 +866,9 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
     int proposals = 0;
     float avg_iou = 0;
 
+    float mean_recall = 0.0;
+    float mean_iou = 0.0;
+
     for (i = 0; i < m; ++i) {
         char *path = paths[i];
         image orig = load_image(path, 0, 0, net.c);
@@ -902,12 +905,28 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
                 ++correct;
             }
         }
+
+        float recall = 100.*correct / total;
+        float iou = avg_iou * 100 / total;
+
+        mean_recall += recall;
+        mean_iou += iou;
+
         //fprintf(stderr, " %s - %s - ", paths[i], labelpath);
-        fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), avg_iou * 100 / total, 100.*correct / total);
+        fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), iou, recall);
         free(id);
         free_image(orig);
         free_image(sized);
     }
+
+    mean_recall = mean_recall / m;
+    mean_iou = mean_iou / m;
+
+    FILE *fp;
+    fp = fopen ( "recall.txt", "w+" );
+    fprintf(fp, "Recall: %.2f%%\n", mean_recall);
+    fprintf(fp, "IOU: %.2f%%\n", mean_iou);
+    fclose ( fp );
 }
 
 typedef struct {
