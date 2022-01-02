@@ -1398,21 +1398,18 @@ float validate_detector_recprec(char *datacfg, char *cfgfile, char *weightfile, 
     }
 
 
-    for (i = 0; i < classes; ++i) {
+    /*for (i = 0; i < classes; ++i) {
 
         float class_precision = (float)tp_for_thresh_per_class[i] / ((float)tp_for_thresh_per_class[i] + (float)fp_for_thresh_per_class[i]);
         float class_recall = (float)tp_for_thresh_per_class[i] / ((float)tp_for_thresh_per_class[i] + (float)(truth_classes_count[i] - tp_for_thresh_per_class[i]));
         printf("Precision = %1.2f, Recall = %1.2f, avg IOU = %2.2f%% \n\n", class_precision, class_recall, avg_iou_per_class[i]);
-    }
+    }*/
 
     const float cur_precision = (float)tp_for_thresh / ((float)tp_for_thresh + (float)fp_for_thresh);
     const float cur_recall = (float)tp_for_thresh / ((float)tp_for_thresh + (float)(unique_truth_count - tp_for_thresh));
     const float f1_score = 2.F * cur_precision * cur_recall / (cur_precision + cur_recall);
-    printf("\n for conf_thresh = %1.2f, precision = %1.2f, recall = %1.2f, F1-score = %1.2f \n",
-        thresh_calc_avg_iou, cur_precision, cur_recall, f1_score);
-
-    printf(" for conf_thresh = %0.2f, TP = %d, FP = %d, FN = %d, average IoU = %2.2f %% \n",
-        thresh_calc_avg_iou, tp_for_thresh, fp_for_thresh, unique_truth_count - tp_for_thresh, avg_iou * 100);
+    printf("\nprecision = %1.2f, recall = %1.2f, F1-score = %1.2f \n",
+         cur_precision, cur_recall, f1_score);
 
     
     free(detections);
