@@ -1140,6 +1140,311 @@ int detections_comparator(const void *pa, const void *pb)
     return 0;
 }
 
+float validate_detector_recprec(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, const float iou_thresh, const int map_points, int letter_box, network *existing_net)
+{
+    int j;
+    list *options = read_data_cfg(datacfg);
+    char *valid_images = option_find_str(options, "valid", "data/train.txt");
+    char *difficult_valid_images = option_find_str(options, "difficult", NULL);
+    char *name_list = option_find_str(options, "names", "data/names.list");
+    int names_size = 0;
+    char **names = get_labels_custom(name_list, &names_size); 
+    FILE* reinforcement_fd = NULL;
+
+    network net;
+    //int initial_batch;
+    if (existing_net) {
+        char *train_images = option_find_str(options, "train", "data/train.txt");
+        valid_images = option_find_str(options, "valid", train_images);
+        net = *existing_net;
+        remember_network_recurrent_state(*existing_net);
+        free_network_recurrent_state(*existing_net);
+    }
+    else {
+        net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
+        if (weightfile) {
+            load_weights(&net, weightfile);
+        }
+        //set_batch_network(&net, 1);
+        fuse_conv_batchnorm(net);
+        calculate_binary_weights(net);
+    }
+    if (net.layers[net.n - 1].classes != names_size) {
+        printf("\n Error: in the file %s number of names %d that isn't equal to classes=%d in the file %s \n",
+            name_list, names_size, net.layers[net.n - 1].classes, cfgfile);
+        getchar();
+    }
+    srand(time(0));
+
+    list *plist = get_paths(valid_images);
+    char **paths = (char **)list_to_array(plist);
+
+    char **paths_dif = NULL;
+    if (difficult_valid_images) {
+        list *plist_dif = get_paths(difficult_valid_images);
+        paths_dif = (char **)list_to_array(plist_dif);
+    }
+
+
+    layer l = net.layers[net.n - 1];
+    int k;
+    for (k = 0; k < net.n; ++k) {
+        layer lk = net.layers[k];
+        if (lk.type == YOLO || lk.type == GAUSSIAN_YOLO || lk.type == REGION) {
+            l = lk;
+        }
+    }
+    int classes = l.classes;
+
+    int m = plist->size;
+    int i = 0;
+    int t;
+
+    const float thresh = .005;
+    const float nms = .45;
+    //const float iou_thresh = 0.5;
+
+    int nthreads = 4;
+    if (m < 4) nthreads = m;
+    image* val = (image*)xcalloc(nthreads, sizeof(image));
+    image* val_resized = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf = (image*)xcalloc(nthreads, sizeof(image));
+    image* buf_resized = (image*)xcalloc(nthreads, sizeof(image));
+    pthread_t* thr = (pthread_t*)xcalloc(nthreads, sizeof(pthread_t));
+
+    load_args args = { 0 };
+    args.w = net.w;
+    args.h = net.h;
+    args.c = net.c;
+    letter_box = net.letter_box;
+    if (letter_box) args.type = LETTERBOX_DATA;
+    else args.type = IMAGE_DATA;
+
+    //const float thresh_calc_avg_iou = 0.24;
+    float avg_iou = 0;
+    int tp_for_thresh = 0;
+    int fp_for_thresh = 0;
+
+    box_prob* detections = (box_prob*)xcalloc(1, sizeof(box_prob));
+    int detections_count = 0;
+    int unique_truth_count = 0;
+
+    int* truth_classes_count = (int*)xcalloc(classes, sizeof(int));
+
+    // For multi-class precision and recall computation
+    float *avg_iou_per_class = (float*)xcalloc(classes, sizeof(float));
+    int *tp_for_thresh_per_class = (int*)xcalloc(classes, sizeof(int));
+    int *fp_for_thresh_per_class = (int*)xcalloc(classes, sizeof(int));
+
+    for (t = 0; t < nthreads; ++t) {
+        args.path = paths[i + t];
+        args.im = &buf[t];
+        args.resized = &buf_resized[t];
+        thr[t] = load_data_in_thread(args);
+    }
+    time_t start = time(0);
+    for (i = nthreads; i < m + nthreads; i += nthreads) {
+        fprintf(stderr, "\r%d", i);
+        for (t = 0; t < nthreads && (i + t - nthreads) < m; ++t) {
+            pthread_join(thr[t], 0);
+            val[t] = buf[t];
+            val_resized[t] = buf_resized[t];
+        }
+        for (t = 0; t < nthreads && (i + t) < m; ++t) {
+            args.path = paths[i + t];
+            args.im = &buf[t];
+            args.resized = &buf_resized[t];
+            thr[t] = load_data_in_thread(args);
+        }
+        for (t = 0; t < nthreads && i + t - nthreads < m; ++t) {
+            const int image_index = i + t - nthreads;
+            char *path = paths[image_index];
+            char *id = basecfg(path);
+            float *X = val_resized[t].data;
+            network_predict(net, X);
+
+            int nboxes = 0;
+            float hier_thresh = 0;
+            detection *dets;
+            if (args.type == LETTERBOX_DATA) {
+                dets = get_network_boxes(&net, val[t].w, val[t].h, thresh, hier_thresh, 0, 1, &nboxes, letter_box);
+            }
+            else {
+                dets = get_network_boxes(&net, 1, 1, thresh, hier_thresh, 0, 0, &nboxes, letter_box);
+            }
+            //detection *dets = get_network_boxes(&net, val[t].w, val[t].h, thresh, hier_thresh, 0, 1, &nboxes, letter_box); // for letter_box=1
+            if (nms) {
+                if (l.nms_kind == DEFAULT_NMS) do_nms_sort(dets, nboxes, l.classes, nms);
+                else diounms_sort(dets, nboxes, l.classes, nms, l.nms_kind, l.beta_nms);
+            }
+
+            //if (l.embedding_size) set_track_id(dets, nboxes, thresh, l.sim_thresh, l.track_ciou_norm, l.track_history_size, l.dets_for_track, l.dets_for_show);
+
+            char labelpath[4096];
+            replace_image_to_label(path, labelpath);
+            int num_labels = 0;
+            box_label *truth = read_boxes(labelpath, &num_labels);
+            int j;
+            for (j = 0; j < num_labels; ++j) {
+                truth_classes_count[truth[j].id]++;
+            }
+
+            // difficult
+            box_label *truth_dif = NULL;
+            int num_labels_dif = 0;
+            if (paths_dif)
+            {
+                char *path_dif = paths_dif[image_index];
+
+                char labelpath_dif[4096];
+                replace_image_to_label(path_dif, labelpath_dif);
+
+                truth_dif = read_boxes(labelpath_dif, &num_labels_dif);
+            }
+
+            const int checkpoint_detections_count = detections_count;
+
+            int i;
+            for (i = 0; i < nboxes; ++i) {
+
+                int class_id;
+                for (class_id = 0; class_id < classes; ++class_id) {
+                    float prob = dets[i].prob[class_id];
+                    if (prob > 0) {
+                        detections_count++;
+                        detections = (box_prob*)xrealloc(detections, detections_count * sizeof(box_prob));
+                        detections[detections_count - 1].b = dets[i].bbox;
+                        detections[detections_count - 1].p = prob;
+                        detections[detections_count - 1].image_index = image_index;
+                        detections[detections_count - 1].class_id = class_id;
+                        detections[detections_count - 1].truth_flag = 0;
+                        detections[detections_count - 1].unique_truth_index = -1;
+
+                        int truth_index = -1;
+                        float max_iou = 0;
+                        for (j = 0; j < num_labels; ++j)
+                        {
+                            box t = { truth[j].x, truth[j].y, truth[j].w, truth[j].h };
+                            //printf(" IoU = %f, prob = %f, class_id = %d, truth[j].id = %d \n",
+                            //    box_iou(dets[i].bbox, t), prob, class_id, truth[j].id);
+                            float current_iou = box_iou(dets[i].bbox, t);
+                            if (current_iou > iou_thresh && class_id == truth[j].id) {
+                                if (current_iou > max_iou) {
+                                    max_iou = current_iou;
+                                    truth_index = unique_truth_count + j;
+                                }
+                            }
+                        }
+
+                        // best IoU
+                        if (truth_index > -1) {
+                            detections[detections_count - 1].truth_flag = 1;
+                            detections[detections_count - 1].unique_truth_index = truth_index;
+                        }
+                        else {
+                            // if object is difficult then remove detection
+                            for (j = 0; j < num_labels_dif; ++j) {
+                                box t = { truth_dif[j].x, truth_dif[j].y, truth_dif[j].w, truth_dif[j].h };
+                                float current_iou = box_iou(dets[i].bbox, t);
+                                if (current_iou > iou_thresh && class_id == truth_dif[j].id) {
+                                    --detections_count;
+                                    break;
+                                }
+                            }
+                        }
+
+                        // calc avg IoU, true-positives, false-positives for required Threshold
+                        if (prob > thresh_calc_avg_iou) {
+                            int z, found = 0;
+                            for (z = checkpoint_detections_count; z < detections_count - 1; ++z) {
+                                if (detections[z].unique_truth_index == truth_index) {
+                                    found = 1; break;
+                                }
+                            }
+
+                            if (truth_index > -1 && found == 0) {
+                                avg_iou += max_iou;
+                                ++tp_for_thresh;
+                                avg_iou_per_class[class_id] += max_iou;
+                                tp_for_thresh_per_class[class_id]++;
+                            }
+                            else{
+                                fp_for_thresh++;
+                                fp_for_thresh_per_class[class_id]++;
+                            }
+                        }
+                    }
+                }
+            }
+
+            unique_truth_count += num_labels;
+
+            
+
+            free_detections(dets, nboxes);
+            free(id);
+            free_image(val[t]);
+            free_image(val_resized[t]);
+        }
+    }
+
+    if ((tp_for_thresh + fp_for_thresh) > 0)
+        avg_iou = avg_iou / (tp_for_thresh + fp_for_thresh);
+
+    int class_id;
+    for(class_id = 0; class_id < classes; class_id++){
+        if ((tp_for_thresh_per_class[class_id] + fp_for_thresh_per_class[class_id]) > 0)
+            avg_iou_per_class[class_id] = avg_iou_per_class[class_id] / (tp_for_thresh_per_class[class_id] + fp_for_thresh_per_class[class_id]);
+    }
+
+
+    /*for (i = 0; i < classes; ++i) {
+
+        float class_precision = (float)tp_for_thresh_per_class[i] / ((float)tp_for_thresh_per_class[i] + (float)fp_for_thresh_per_class[i]);
+        float class_recall = (float)tp_for_thresh_per_class[i] / ((float)tp_for_thresh_per_class[i] + (float)(truth_classes_count[i] - tp_for_thresh_per_class[i]));
+        printf("Precision = %1.2f, Recall = %1.2f, avg IOU = %2.2f%% \n\n", class_precision, class_recall, avg_iou_per_class[i]);
+    }*/
+
+    const float cur_precision = (float)tp_for_thresh / ((float)tp_for_thresh + (float)fp_for_thresh);
+    const float cur_recall = (float)tp_for_thresh / ((float)tp_for_thresh + (float)(unique_truth_count - tp_for_thresh));
+    const float f1_score = 2.F * cur_precision * cur_recall / (cur_precision + cur_recall);
+    printf("\nprecision = %1.2f, recall = %1.2f, F1-score = %1.2f \n",
+         cur_precision, cur_recall, f1_score);
+
+    
+    free(detections);
+    free(truth_classes_count);
+
+    free(avg_iou_per_class);
+    free(tp_for_thresh_per_class);
+    free(fp_for_thresh_per_class);
+
+    fprintf(stderr, "Total Detection Time: %d Seconds\n", (int)(time(0) - start));
+    if (reinforcement_fd != NULL) fclose(reinforcement_fd);
+
+    // free memory
+    free_ptrs((void**)names, net.layers[net.n - 1].classes);
+    free_list_contents_kvp(options);
+    free_list(options);
+
+    if (existing_net) {
+        //set_batch_network(&net, initial_batch);
+        //free_network_recurrent_state(*existing_net);
+        restore_network_recurrent_state(*existing_net);
+        //randomize_network_recurrent_state(*existing_net);
+    }
+    else {
+        free_network(net);
+    }
+    if (val) free(val);
+    if (val_resized) free(val_resized);
+    if (thr) free(thr);
+    if (buf) free(buf);
+    if (buf_resized) free(buf_resized);
+
+    return 0;
+}
+
 float validate_detector_map(char *datacfg, char *cfgfile, char *weightfile, float thresh_calc_avg_iou, const float iou_thresh, const int map_points, int letter_box, network *existing_net)
 {
     int j;
@@ -2284,6 +2589,7 @@ void run_detector(int argc, char **argv)
     else if (0 == strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);
     else if (0 == strcmp(argv[2], "loss")) validate_detector_loss(datacfg, cfg, weights, gpus, ngpus, clear, dont_show, calc_map, thresh, iou_thresh, mjpeg_port, show_imgs, benchmark_layers, chart_path);
     else if (0 == strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh, iou_thresh, map_points, letter_box, NULL);
+    else if (0 == strcmp(argv[2], "recprec")) validate_detector_recprec(datacfg, cfg, weights, thresh, iou_thresh, map_points, letter_box, NULL);
     else if (0 == strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
     else if (0 == strcmp(argv[2], "draw")) {
         int it_num = 100;
