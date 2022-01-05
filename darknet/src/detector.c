@@ -1408,8 +1408,8 @@ float validate_detector_recprec(char *datacfg, char *cfgfile, char *weightfile, 
     const float cur_precision = (float)tp_for_thresh / ((float)tp_for_thresh + (float)fp_for_thresh);
     const float cur_recall = (float)tp_for_thresh / ((float)tp_for_thresh + (float)(unique_truth_count - tp_for_thresh));
     const float f1_score = 2.F * cur_precision * cur_recall / (cur_precision + cur_recall);
-    printf("\nprecision = %1.2f, recall = %1.2f, F1-score = %1.2f \n",
-         cur_precision, cur_recall, f1_score);
+    printf("\nprecision = %1.2f, recall = %1.2f, F1-score = %1.2f, avg-iou = %1.2f\n",
+         cur_precision, cur_recall, f1_score, avg_iou);
 
     
     free(detections);
