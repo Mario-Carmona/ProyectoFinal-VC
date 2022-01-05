@@ -562,12 +562,27 @@ void rotate_image_cw(image im, int times)
 
 void flip_image(image a)
 {
+    /*
+    int i,j,k;
+    for(k = 0; k < a.c; ++k){
+        for(i = 0; i < a.h; ++i){
+            for(j = 0; j < a.w/2; ++j){
+                int index = j + a.w*(i + a.h*(k));
+                int flip = (a.w - j - 1) + a.w*(i + a.h*(k));
+                float swap = a.data[flip];
+                a.data[flip] = a.data[index];
+                a.data[index] = swap;
+            }
+        }
+    }
+    */
+
     int i,j,k;
     for(k = 0; k < a.c; ++k){
         for(i = 0; i < a.w; ++i){
             for(j = 0; j < a.h/2; ++j){
-                int index = j + a.h*(i + a.w*(k));
-                int flip = (a.h - j - 1) + a.h*(i + a.w*(k));
+                int index = i + a.w*(j + a.h*k);
+                int flip = i + a.w*( (a.h - j - 1) + a.h*k);
                 float swap = a.data[flip];
                 a.data[flip] = a.data[index];
                 a.data[index] = swap;
