@@ -450,199 +450,6 @@ void train_detector(char *datacfg, char *cfgfile, char *weightfile, int *gpus, i
     }
 }
 
-void validate_detector_loss(char *datacfg, char *cfgfile, char *weightfile, int *gpus, int ngpus, int clear, int dont_show, int calc_map, float thresh, float iou_thresh, int mjpeg_port, int show_imgs, int benchmark_layers, char* chart_path)
-{
-    list *options = read_data_cfg(datacfg);
-    char *valid_images = option_find_str(options, "valid", "data/train.txt");
-
-    srand(time(0));
-    char *base = basecfg(cfgfile);
-    printf("%s\n", base);
-    network* nets = (network*)xcalloc(ngpus, sizeof(network));
-
-    srand(time(0));
-    int seed = rand();
-    int k;
-    for (k = 0; k < ngpus; ++k) {
-        srand(seed);
-#ifdef GPU
-        cuda_set_device(gpus[k]);
-#endif
-        nets[k] = parse_network_cfg(cfgfile);
-        nets[k].benchmark_layers = benchmark_layers;
-        if (weightfile) {
-            load_weights(&nets[k], weightfile);
-        }
-        if (clear) {
-            *nets[k].seen = 0;
-            *nets[k].cur_iteration = 0;
-        }
-        nets[k].learning_rate *= ngpus;
-    }
-    srand(time(0));
-    network net = nets[0];
-
-    const int actual_batch_size = net.batch * net.subdivisions;
-    if (actual_batch_size == 1) {
-        printf("\n Error: You set incorrect value batch=1 for Training! You should set batch=64 subdivision=64 \n");
-        getchar();
-    }
-    else if (actual_batch_size < 8) {
-        printf("\n Warning: You set batch=%d lower than 64! It is recommended to set batch=64 subdivision=64 \n", actual_batch_size);
-    }
-
-    int imgs = net.batch * net.subdivisions * ngpus;
-    printf("Learning Rate: %g, Momentum: %g, Decay: %g\n", net.learning_rate, net.momentum, net.decay);
-    data train, buffer;
-
-    layer l = net.layers[net.n - 1];
-    for (k = 0; k < net.n; ++k) {
-        layer lk = net.layers[k];
-        if (lk.type == YOLO || lk.type == GAUSSIAN_YOLO || lk.type == REGION) {
-            l = lk;
-            printf(" Detection layer: %d - type = %d \n", k, l.type);
-        }
-    }
-
-    int classes = l.classes;
-
-    list *plist;
-    int train_images_num;
-    char **paths;
-
-    FILE *fp;
-    fp = fopen ( "loss.txt", "w+" );
-
-
-    plist = get_paths(valid_images);
-    train_images_num = plist->size;
-    paths = (char **)list_to_array(plist);
-
-    const int init_w = net.w;
-    const int init_h = net.h;
-    const int init_b = net.batch;
-    int iter_save, iter_save_last, iter_map;
-    iter_save = get_current_iteration(net);
-    iter_save_last = get_current_iteration(net);
-    iter_map = get_current_iteration(net);
-    float mean_average_precision = -1;
-    float best_map = mean_average_precision;
-
-    load_args args = { 0 };
-    args.w = net.w;
-    args.h = net.h;
-    args.c = net.c;
-    args.paths = paths;
-    args.n = imgs;
-    args.m = plist->size;
-    args.classes = classes;
-    args.flip = net.flip;
-    args.jitter = l.jitter;
-    args.resize = l.resize;
-    args.num_boxes = l.max_boxes;
-    args.truth_size = l.truth_size;
-    net.num_boxes = args.num_boxes;
-    net.train_images_num = train_images_num;
-    args.d = &buffer;
-    args.type = DETECTION_DATA;
-    args.threads = 64;    // 16 or 64
-
-    args.angle = net.angle;
-    args.gaussian_noise = net.gaussian_noise;
-    args.blur = net.blur;
-    args.mixup = net.mixup;
-    args.exposure = net.exposure;
-    args.saturation = net.saturation;
-    args.hue = net.hue;
-    args.letter_box = net.letter_box;
-    args.mosaic_bound = net.mosaic_bound;
-    args.contrastive = net.contrastive;
-    args.contrastive_jit_flip = net.contrastive_jit_flip;
-    args.contrastive_color = net.contrastive_color;
-    if (dont_show && show_imgs) show_imgs = 2;
-    args.show_imgs = show_imgs;
-
-#ifdef OPENCV
-    //int num_threads = get_num_threads();
-    //if(num_threads > 2) args.threads = get_num_threads() - 2;
-    args.threads = 6 * ngpus;   // 3 for - Amazon EC2 Tesla V100: p3.2xlarge (8 logical cores) - p3.16xlarge
-    //args.threads = 12 * ngpus;    // Ryzen 7 2700X (16 logical cores)
-    mat_cv* img = NULL;
-    float max_img_loss = net.max_chart_loss;
-    int number_of_lines = 100;
-    int img_size = 1000;
-    char windows_name[100];
-    sprintf(windows_name, "chart_%s.png", base);
-    img = draw_train_chart(windows_name, max_img_loss, net.max_batches, number_of_lines, img_size, dont_show, chart_path);
-#endif    //OPENCV
-    if (net.contrastive && args.threads > net.batch/2) args.threads = net.batch / 2;
-    if (net.track) {
-        args.track = net.track;
-        args.augment_speed = net.augment_speed;
-        if (net.sequential_subdivisions) args.threads = net.sequential_subdivisions * ngpus;
-        else args.threads = net.subdivisions * ngpus;
-        args.mini_batch = net.batch / net.time_steps;
-        printf("\n Tracking! batch = %d, subdiv = %d, time_steps = %d, mini_batch = %d \n", net.batch, net.subdivisions, net.time_steps, args.mini_batch);
-    }
-    //printf(" imgs = %d \n", imgs);
-
-    pthread_t load_thread = load_data(args);
-
-    int count = 0;
-    double time_remaining, avg_time = -1, alpha_time = 0.01;
-
-    double time = what_time_is_it_now();
-    pthread_join(load_thread, 0);
-    train = buffer;
-    if (net.track) {
-        net.sequential_subdivisions = get_current_seq_subdivisions(net);
-        args.threads = net.sequential_subdivisions * ngpus;
-        printf(" sequential_subdivisions = %d, sequence = %d \n", net.sequential_subdivisions, get_sequence_value(net));
-    }
-    load_thread = load_data(args);
-
-    const double load_time = (what_time_is_it_now() - time);
-    printf("Loaded: %lf seconds", load_time);
-    printf("\n");
-
-    time = what_time_is_it_now();
-    float loss = 0;
-#ifdef GPU
-    if (ngpus == 1) {
-        int wait_key = (dont_show) ? 0 : 1;
-        loss = train_network_waitkey(net, train, wait_key);
-    }
-    else {
-        loss = train_networks(nets, ngpus, train, 4);
-    }
-#else
-    loss = train_network(net, train);
-#endif
-
-
-    fprintf(fp, "Loss: %f", loss);
-
-    free_load_threads(&args);
-    free(paths);
-    free_list_contents(plist);
-    free_list(plist);
-
-
-    fclose ( fp );
-
-    // free memory
-    pthread_join(load_thread, 0);
-    free_data(buffer);
-
-    free(base);
-
-    free_list_contents_kvp(options);
-    free_list(options);
-
-    for (k = 0; k < ngpus; ++k) free_network(nets[k]);
-    free(nets);
-}
-
 static int get_coco_image_id(char *filename)
 {
     char *p = strrchr(filename, '/');
@@ -1058,9 +865,6 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
     int proposals = 0;
     float avg_iou = 0;
 
-    float mean_recall = 0.0;
-    float mean_iou = 0.0;
-
     for (i = 0; i < m; ++i) {
         char *path = paths[i];
         image orig = load_image(path, 0, 0, net.c);
@@ -1098,27 +902,12 @@ void validate_detector_recall(char *datacfg, char *cfgfile, char *weightfile)
             }
         }
 
-        float recall = 100.*correct / total;
-        float iou = avg_iou * 100 / total;
-
-        mean_recall += recall;
-        mean_iou += iou;
-
         //fprintf(stderr, " %s - %s - ", paths[i], labelpath);
-        fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), iou, recall);
+        fprintf(stderr, "%5d %5d %5d\tRPs/Img: %.2f\tIOU: %.2f%%\tRecall:%.2f%%\n", i, correct, total, (float)proposals / (i + 1), avg_iou * 100 / total, 100.*correct / total);
         free(id);
         free_image(orig);
         free_image(sized);
     }
-
-    mean_recall = mean_recall / m;
-    mean_iou = mean_iou / m;
-
-    FILE *fp;
-    fp = fopen ( "recall.txt", "w+" );
-    fprintf(fp, "Recall: %.2f\n", mean_recall);
-    fprintf(fp, "IOU: %.2f", mean_iou);
-    fclose ( fp );
 }
 
 typedef struct {
@@ -2587,7 +2376,6 @@ void run_detector(int argc, char **argv)
     else if (0 == strcmp(argv[2], "train")) train_detector(datacfg, cfg, weights, gpus, ngpus, clear, dont_show, calc_map, thresh, iou_thresh, mjpeg_port, show_imgs, benchmark_layers, chart_path);
     else if (0 == strcmp(argv[2], "valid")) validate_detector(datacfg, cfg, weights, outfile);
     else if (0 == strcmp(argv[2], "recall")) validate_detector_recall(datacfg, cfg, weights);
-    else if (0 == strcmp(argv[2], "loss")) validate_detector_loss(datacfg, cfg, weights, gpus, ngpus, clear, dont_show, calc_map, thresh, iou_thresh, mjpeg_port, show_imgs, benchmark_layers, chart_path);
     else if (0 == strcmp(argv[2], "map")) validate_detector_map(datacfg, cfg, weights, thresh, iou_thresh, map_points, letter_box, NULL);
     else if (0 == strcmp(argv[2], "recprec")) validate_detector_recprec(datacfg, cfg, weights, thresh, iou_thresh, map_points, letter_box, NULL);
     else if (0 == strcmp(argv[2], "calc_anchors")) calc_anchors(datacfg, num_of_clusters, width, height, show);
