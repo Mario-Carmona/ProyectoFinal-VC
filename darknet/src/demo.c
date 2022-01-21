@@ -163,6 +163,9 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     else{
         archivo = fopen(outfile, "w+");
     }
+    if(archivo != NULL){
+        fprintf(archivo, "[\n");
+    }
     demo_json_port = json_port;
     printf("Demo\n");
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
@@ -290,15 +293,21 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             //printf("\033[2J");
             //printf("\033[1;1H");
             //printf("\nFPS:%.1f\n", fps);
+
+            ++frame_id;
+
             if(archivo == NULL){
                 printf("Objects:\n\n");
             }
             else {
-                fprintf(archivo, "Objects:\n\n");
+                if(frame_id != 1){
+                    fprintf(archivo, ",\n");
+                }
+                fprintf(archivo, "{\n");
+                fprintf(archivo, " \"frame_id\":%d,\n", frame_id);
+                fprintf(archivo, " \"objects\": [\n");
             }
-            
 
-            ++frame_id;
             if (demo_json_port > 0) {
                 int timeout = 400000;
                 send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
@@ -317,6 +326,11 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 
             if (!benchmark && !dontdraw_bbox) draw_detections_cv_v3(show_img, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output, archivo);
             free_detections(local_dets, local_nboxes);
+
+            if(archivo != NULL){
+                fprintf(archivo, "\n ]\n");
+                fprintf(archivo, "}");
+            }
 
             printf("\nFPS:%.1f \t AVG_FPS:%.1f\n", fps, avg_fps);
 
@@ -405,7 +419,10 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
         }
     }
 
-    fclose(archivo);
+    if(archivo != NULL){
+        fprintf(archivo, "\n]");
+        fclose(archivo);
+    }
 
     printf("input video stream closed. \n");
     if (output_video_writer) {
