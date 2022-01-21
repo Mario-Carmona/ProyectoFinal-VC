@@ -156,11 +156,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     demo_classes = classes;
     demo_thresh = thresh;
     demo_ext_output = ext_output;
+    FILE *archivo;
     if(outfile == 0){
-        FILE *archivo = NULL;
+        archivo = NULL;
     }
     else{
-        FILE *archivo = fopen(outfile, "w+");
+        archivo = fopen(outfile, "w+");
     }
     demo_json_port = json_port;
     printf("Demo\n");
