@@ -895,7 +895,7 @@ extern "C" void save_cv_jpg(mat_cv *img_src, const char *name)
 // ====================================================================
 // Draw Detection
 // ====================================================================
-extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output)
+extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output, FILE *archivo)
 {
     try {
         cv::Mat *show_img = (cv::Mat*)mat;
@@ -1015,8 +1015,14 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
 
                 cv::rectangle(*show_img, pt1, pt2, color, width, 8, 0);
                 if (ext_output)
-                    printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
-                    (float)left, (float)top, b.w*show_img->cols, b.h*show_img->rows);
+                    if(archivo == NULL) {
+                        printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
+                        (float)left, (float)top, b.w*show_img->cols, b.h*show_img->rows);
+                    }
+                    else {
+                        fprintf(archivo, "\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
+                        (float)left, (float)top, b.w*show_img->cols, b.h*show_img->rows);
+                    }
                 else
                     printf("\n");
 
