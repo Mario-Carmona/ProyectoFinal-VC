@@ -895,7 +895,7 @@ extern "C" void save_cv_jpg(mat_cv *img_src, const char *name)
 // ====================================================================
 // Draw Detection
 // ====================================================================
-extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output)
+extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, float thresh, char **names, image **alphabet, int classes, int ext_output, FILE *archivo)
 {
     try {
         cv::Mat *show_img = (cv::Mat*)mat;
@@ -907,12 +907,14 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
         for (i = 0; i < num; ++i) {
             char labelstr[4096] = { 0 };
             int class_id = -1;
+            float confidence;
             for (j = 0; j < classes; ++j) {
                 int show = strncmp(names[j], "dont_show", 9);
                 if (dets[i].prob[j] > thresh && show) {
                     if (class_id < 0) {
                         strcat(labelstr, names[j]);
                         class_id = j;
+                        confidence = dets[i].prob[j];
                         char buff[20];
                         if (dets[i].track_id) {
                             sprintf(buff, " (id: %d)", dets[i].track_id);
@@ -1015,8 +1017,17 @@ extern "C" void draw_detections_cv_v3(mat_cv* mat, detection *dets, int num, flo
 
                 cv::rectangle(*show_img, pt1, pt2, color, width, 8, 0);
                 if (ext_output)
-                    printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
-                    (float)left, (float)top, b.w*show_img->cols, b.h*show_img->rows);
+                    if(archivo == NULL) {
+                        printf("\t(left_x: %4.0f   top_y: %4.0f   width: %4.0f   height: %4.0f)\n",
+                        (float)left, (float)top, b.w*show_img->cols, b.h*show_img->rows);
+                    }
+                    else {
+                        if(i != 0){
+                            fprintf(archivo, ",\n");
+                        }
+                        fprintf(archivo, "  {\"class_id\":%d, \"name\":%s, \"relative_coordinates\":{\"center_x\":%.6f, \"center_y\":%.6f, \"width\":%.6f, \"height\":%.6f}, \"confidence\":%.6f}", 
+                        class_id, names[class_id], b.x, b.y, b.w, b.h, confidence);
+                    }
                 else
                     printf("\n");
 

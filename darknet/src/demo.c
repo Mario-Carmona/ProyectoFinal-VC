@@ -141,7 +141,7 @@ double get_wall_time()
 }
 
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, char *outfile, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     if (avgframes < 1) avgframes = 1;
@@ -156,6 +156,16 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
     demo_classes = classes;
     demo_thresh = thresh;
     demo_ext_output = ext_output;
+    FILE *archivo;
+    if(outfile == 0){
+        archivo = NULL;
+    }
+    else{
+        archivo = fopen(outfile, "w+");
+    }
+    if(archivo != NULL){
+        fprintf(archivo, "[\n");
+    }
     demo_json_port = json_port;
     printf("Demo\n");
     net = parse_network_cfg_custom(cfgfile, 1, 1);    // set batch=1
@@ -283,9 +293,21 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             //printf("\033[2J");
             //printf("\033[1;1H");
             //printf("\nFPS:%.1f\n", fps);
-            printf("Objects:\n\n");
 
             ++frame_id;
+
+            if(archivo == NULL){
+                printf("Objects:\n\n");
+            }
+            else {
+                if(frame_id != 1){
+                    fprintf(archivo, ",\n");
+                }
+                fprintf(archivo, "{\n");
+                fprintf(archivo, " \"frame_id\":%d,\n", frame_id);
+                fprintf(archivo, " \"objects\": [\n");
+            }
+
             if (demo_json_port > 0) {
                 int timeout = 400000;
                 send_json(local_dets, local_nboxes, l.classes, demo_names, frame_id, demo_json_port, timeout);
@@ -302,8 +324,13 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
                 }
             }
 
-            if (!benchmark && !dontdraw_bbox) draw_detections_cv_v3(show_img, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output);
+            if (!benchmark && !dontdraw_bbox) draw_detections_cv_v3(show_img, local_dets, local_nboxes, demo_thresh, demo_names, demo_alphabet, demo_classes, demo_ext_output, archivo);
             free_detections(local_dets, local_nboxes);
+
+            if(archivo != NULL){
+                fprintf(archivo, "\n ]\n");
+                fprintf(archivo, "}");
+            }
 
             printf("\nFPS:%.1f \t AVG_FPS:%.1f\n", fps, avg_fps);
 
@@ -391,6 +418,12 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
             }
         }
     }
+
+    if(archivo != NULL){
+        fprintf(archivo, "\n]");
+        fclose(archivo);
+    }
+
     printf("input video stream closed. \n");
     if (output_video_writer) {
         release_video_writer(&output_video_writer);
@@ -427,7 +460,7 @@ void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int 
 }
 #else
 void demo(char *cfgfile, char *weightfile, float thresh, float hier_thresh, int cam_index, const char *filename, char **names, int classes, int avgframes,
-    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, int letter_box_in, int time_limit_sec, char *http_post_host,
+    int frame_skip, char *prefix, char *out_filename, int mjpeg_port, int dontdraw_bbox, int json_port, int dont_show, int ext_output, char *outfile, int letter_box_in, int time_limit_sec, char *http_post_host,
     int benchmark, int benchmark_layers)
 {
     fprintf(stderr, "Demo needs OpenCV for webcam images.\n");
